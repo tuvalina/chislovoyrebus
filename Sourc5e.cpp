@@ -7,68 +7,117 @@
 #include <ctype.h>
 #include <time.h>
 
-#define MAX_LENGTH 1024
 
-char getLet(char* str, int* isWordBeginning);
+#define MAX_WORDS 7
+#define MAX_LENGTH 1024
+#define NOT_PRESENT -1
+
+char getletter(char* str, char words[][MAX_LENGTH], char* answer, int* isWordBeginning);
 int isLetPresent(char let, char lettersValue[]);
+int checkWordBeginning(char c, char* str);
 void replaceLetNum(char* strLet, char* strNum, char lettersValue[]);
 void replaceNumLet(char let, char* strNum, char lettersValue[]);
-int isStringDone(char* str, int* success);
-
+void isRebusDone(char* str, char words[][MAX_LENGTH], char* answer, int* lettersRemain, int* success);
+void tokeniseStr(char* str, char words[][1024], char* answer);
+int isFirstLetter(char words[][MAX_LENGTH]);
 
 char* rebusSolve(char* str)
 {
-	static char lettersValue[10] = { NULL };
-	static char strNum[1024];
+	static char lettersValue[10] = { 0 };
+	static char strNum[MAX_LENGTH];
 	strncpy(strNum, str, strlen(str));
 
-	char curLet = NULL;
+	char curLet = 0;
 	int isWordBeginning = 0;
 	int success = 0;
+	int lettersRemain = 0;
 	char* result = NULL;
 
-	if (isStringDone(strNum, &success))
-		if (success)
-			return strNum;
-		else return 0;
+	static char words[MAX_WORDS][MAX_LENGTH] = { 0 };
+	static char answer[MAX_LENGTH] = { 0 };
 
-	do {
-		curLet = getLet(str, &isWordBeginning);
-		if (curLet == '\0')
-			return 0;
-	} while (isLetPresent(curLet, lettersValue) != -1);
+	tokeniseStr(strNum, words, answer);
+	isRebusDone(strNum, words, answer, &lettersRemain, &success);
+
+	if (success)
+	{
+		if (!lettersRemain)
+			return strNum;
+	}
+	else
+		return 0;
+
+	curLet = getletter(strNum, words, answer, &isWordBeginning);
+	if (curLet == '\0')
+		return 0;
+
 
 	for (int i = isWordBeginning; i < 10; i++)
 	{
-		if (lettersValue[i] == NULL)
+		if (lettersValue[i] == 0)
 			lettersValue[i] = curLet;
 		else continue;
 
 		replaceLetNum(str, strNum, lettersValue);
 
 		result = rebusSolve(strNum);
-		if (!result)
+		if (!result || isFirstLetter(words))
 		{
 			replaceNumLet(curLet, strNum, lettersValue);
-			lettersValue[i] = NULL;
+			lettersValue[i] = 0;
 		}
 	}
 	return result;
 }
 
-char getLet(char* str, int* isWordBeginning)
+char getletter(char* str, char words[][MAX_LENGTH], char* answer, int* isWordBeginning)
 {
-	char c;
-	int i = 0;
-	do {
-		c = str[i];
-		i++;
-	} while (!isalpha(c) && c != '\0');
+	char letter = 0;
+	char c = 0;
+	int found = 0;
+	int strlenWords[MAX_WORDS];
+	for (int i = 0; i < MAX_WORDS && words[i][0]; i++)
+		strlenWords[i] = strlen(words[i]);
+	int strlenAnswer = strlen(answer);
 
-	if (isalpha(c) && (i - 1 == 0 || str[i - 2] == ' '))
+	for (int i = 1; !found; i++)
+	{
+		for (int j = 0; words[j][0] && !found; j++)
+		{
+
+			c = words[j][strlenWords[j] - i];
+			if (isalpha(c))
+			{
+				letter = c;
+				found = 1;
+			}
+		}
+		c = answer[strlenAnswer - i];
+		if (isalpha(c))
+		{
+			letter = c;
+			found = 1;
+		}
+	}
+
+	if (found && checkWordBeginning(letter, str))
 		*isWordBeginning = 1;
 
-	return c;
+	return letter;
+}
+
+int checkWordBeginning(char c, char* str)
+{
+	if (str[0] == c)
+		return 1;
+	int i = 1;
+	while (str[i])
+	{
+		if (str[i] == c && str[i - 1] == ' ')
+			return 1;
+		i++;
+	}
+	return 0;
 }
 
 int isLetPresent(char let, char lettersValue[])
@@ -78,7 +127,7 @@ int isLetPresent(char let, char lettersValue[])
 		if (let == lettersValue[i])
 			return i;
 	}
-	return -1;
+	return NOT_PRESENT;
 }
 
 void replaceLetNum(char* strLet, char* strNum, char lettersValue[])
@@ -87,7 +136,7 @@ void replaceLetNum(char* strLet, char* strNum, char lettersValue[])
 	for (int i = 0; strLet[i] != '\0'; i++)
 	{
 		num = isLetPresent(strLet[i], lettersValue);
-		if (num != -1)
+		if (num != NOT_PRESENT)
 		{
 			char letNum[2] = { '\0' };
 			_itoa(num, letNum, 10);
@@ -107,45 +156,111 @@ void replaceNumLet(char let, char* strNum, char lettersValue[])
 			strNum[i] = let;
 }
 
-int isStringDone(char* str, int* success)
+void isRebusDone(char* str, char words[][MAX_LENGTH], char* answer, int* lettersRemain, int* success)
 {
-	int numbers[7] = { 0 };
-	int answer = 0;
 	int n = 0;
+	char c;
 	char digit[2] = { '\0' };
+	int numSum[MAX_WORDS] = { 0 };
+	int numSumAll = 0;
+	int numAnswer = 0;
+	int minNumOfDigits = 0;
 
+	int strlenWords[MAX_WORDS];
+	for (int i = 0; i < MAX_WORDS && words[i][0]; i++)
+		strlenWords[i] = strlen(words[i]);
+	int strlenAnswer = strlen(answer);
+
+	for (int i = 1; !*lettersRemain && i < strlenAnswer + 1; i++)
+	{
+		for (int j = 0; words[j][0] && !*lettersRemain; j++)
+		{
+			c = words[j][strlenWords[j] - i];
+			if (isdigit(c))
+			{
+				digit[0] = c;
+				numSum[j] += atoi(digit) * (int)pow(10, minNumOfDigits);
+			}
+			if (isalpha(c))
+			{
+				*lettersRemain = 1;
+			}
+		}
+		c = answer[strlenAnswer - i];
+		if (isdigit(c))
+		{
+			digit[0] = c;
+			numAnswer += atoi(digit) * (int)pow(10, minNumOfDigits);
+		}
+		if (isalpha(c))
+		{
+			*lettersRemain = 1;
+		}
+
+		if (!*lettersRemain) minNumOfDigits++;
+	}
+
+	for (int i = 0; i < MAX_WORDS; i++)
+	{
+		numSumAll += numSum[i];
+	}
+
+	if (!minNumOfDigits)
+		*success = 1;
+	if (!*lettersRemain)
+	{
+		if (numSumAll == numAnswer)
+			*success = 1;
+	}
+	else
+	{
+		int numDivider = (int)pow(10, minNumOfDigits);
+		if (numSumAll % numDivider == numAnswer % numDivider)
+			*success = 1;
+	}
+}
+
+void tokeniseStr(char* str, char words[][1024], char* answer)
+{
 	int i = 0;
+	int j = 0;
+	int wordsCount = 0;
 	while (str[i] != '=')
 	{
-		if (isalpha(str[i]))
-			return 0;
-		if (isdigit(str[i]))
+		if (isalnum(str[i]))
 		{
-			digit[0] = str[i];
-			numbers[n] = numbers[n] * 10 + atoi(digit);
+			words[wordsCount][j] = str[i];
+			j++;
 		}
 		if (str[i] == '+')
-			n++;
-		i++;
-	}
-	while (str[i] != '\0')
-	{
-		if (isalpha(str[i]))
-			return 0;
-		if (isdigit(str[i]))
 		{
-			digit[0] = str[i];
-			answer = answer * 10 + atoi(digit);
+			wordsCount++;
+			j = 0;
 		}
 		i++;
 	}
+	j = 0;
+	while (str[i])
+	{
+		if (isalnum(str[i]))
+		{
+			answer[j] = str[i];
+			j++;
+		}
+		i++;
+	}
+}
 
-	int sum = 0;
-	for (int i = 0; i < n + 1; i++)
-		sum += numbers[i];
-	if (sum == answer)
-		*success = 1;
-	return 1;
+int isFirstLetter(char words[][MAX_LENGTH])
+{
+	int i = 0;
+	int j = 0;
+
+	for (i = 0; words[i][0]; i++)
+		if (words[i][0] == '0')
+			return 1;
+
+	return 0;
 }
 
 int main()
@@ -158,6 +273,6 @@ int main()
 	start = clock();
 	printf("%s\n", rebusSolve(strLet));
 	stop = clock();
-	printf("execution took %.3f seconds", ((float)(stop - start) / CLK_TCK));
+	printf("Program running time %.3f seconds", ((float)(stop - start) / CLK_TCK));
 	return 0;
 }
